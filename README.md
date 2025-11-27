@@ -82,7 +82,7 @@ npm run dev
 npm start
 ```
 
-Server runs on `http://localhost:3000`
+Server runs on `http://localhost:5000`
 
 ## Project Structure
 
@@ -444,7 +444,7 @@ pending → approved → closed
 
 **1. Register a Manager:**
 ```bash
-curl -X POST http://localhost:3000/api/auth/register \
+curl -X POST http://localhost:5000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "manager@company.com",
@@ -456,7 +456,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 
 **2. Register an Employee:**
 ```bash
-curl -X POST http://localhost:3000/api/auth/register \
+curl -X POST http://localhost:5000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "employee@company.com",
@@ -469,7 +469,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 
 **3. Login as Employee:**
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "employee@company.com",
@@ -479,7 +479,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 **4. Create Request (use token from step 3):**
 ```bash
-curl -X POST http://localhost:3000/api/requests \
+curl -X POST http://localhost:5000/api/requests \
   -H "Authorization: Bearer <employee-token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -492,7 +492,7 @@ curl -X POST http://localhost:3000/api/requests \
 **5. Login as Manager and Approve:**
 ```bash
 # Login
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "manager@company.com",
@@ -500,7 +500,7 @@ curl -X POST http://localhost:3000/api/auth/login \
   }'
 
 # Approve request
-curl -X POST http://localhost:3000/api/requests/<request-id>/approve \
+curl -X POST http://localhost:5000/api/requests/<request-id>/approve \
   -H "Authorization: Bearer <manager-token>" \
   -H "Content-Type: application/json" \
   -d '{"notes": "Approved"}'
@@ -546,50 +546,6 @@ All logs are structured JSON format:
 
 ---
 
-## Production Deployment
 
-### Environment Variables
-Ensure all production environment variables are set securely:
-- Use strong JWT_SECRET (min 32 characters)
-- Set NODE_ENV=production
-- Use production Supabase credentials
 
-### Recommendations
-- Deploy on services like Railway, Render, or AWS
-- Set up monitoring (New Relic, DataDog)
-- Configure log aggregation
-- Enable HTTPS
-- Set up backup for database
-- Implement rate limiting per user
-- Add request/response logging
 
----
-
-## Troubleshooting
-
-**Issue:** "Invalid token"
-- Solution: Check if token is expired, login again
-
-**Issue:** "Only the assigned employee's manager can approve"
-- Solution: Verify manager_id relationship in employees table
-
-**Issue:** Database connection error
-- Solution: Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env
-
-**Issue:** "Only approved requests can be closed"
-- Solution: Request must be approved by manager first
-
----
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section
-2. Review Supabase logs in dashboard
-3. Check application logs for detailed error messages
-
----
-
-## License
-
-MIT
