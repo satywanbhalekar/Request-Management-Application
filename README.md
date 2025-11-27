@@ -1,45 +1,595 @@
-# Request Management API
+# Request Management System API
 
-A Node.js/Express backend API for managing employee requests with role-based access control and Supabase integration.
+A robust Express.js backend with Supabase PostgreSQL for managing employee requests with approval workflows.
 
 ## Features
 
-- **Authentication**: JWT-based authentication with bcrypt password hashing
-- **Role-Based Access Control**: Support for employee and manager roles
-- **Request Workflow**: Create, approve, reject, and close requests
-- **Action Tracking**: Automatic logging of all request actions
-- **Error Handling**: Comprehensive error handling with custom error classes
-- **Security**: Helmet, CORS, rate limiting, and input validation
-- **Logging**: Structured JSON logging for all operations
+- **JWT Authentication** with bcrypt password hashing
+- **Role-Based Access Control** (Employee/Manager)
+- **Request Workflow**: Create → Approve/Reject → Close
+- **Audit Trail**: Complete action history for requests
+- **Business Rules Enforcement**:
+  - Employees create requests and assign to other employees
+  - Only assigned employee's manager can approve/reject
+  - Only assigned employee can close approved requests
+- **Clean Architecture**: Repository → Service → Controller pattern
+- **Error Handling**: Centralized error middleware
+- **Security**: Helmet, CORS, Rate Limiting
+- **Logging**: Structured JSON logging
 
-## Setup
+## Tech Stack
 
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Copy `.env.example` to `.env` and fill in your Supabase credentials
-4. Start the server: `npm run dev`
+- Node.js + Express.js
+- Supabase PostgreSQL
+- JWT + bcrypt
+- Joi validation
+- Winston logging (structured)
 
-## API Endpoints
+## Setup Instructions
+
+### 1. Prerequisites
+
+- Node.js 16+ installed
+- Supabase account
+- Git
+
+### 2. Create Supabase Project
+
+1. Go to [supabase.com](https://supabase.com)
+2. Create a new project
+3. Note your project URL and service role key
+
+### 3. Setup Database
+
+1. Go to SQL Editor in Supabase dashboard
+2. Copy and paste the SQL from `Database Schema` artifact
+3. Execute the script to create tables
+
+### 4. Install Dependencies
+
+```bash
+npm install
+```
+
+### 5. Environment Configuration
+
+Create `.env` file in root directory:
+
+```bash
+PORT=3000
+NODE_ENV=development
+
+# Get these from Supabase project settings
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+
+# Generate a strong secret key
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+JWT_EXPIRES_IN=7d
+
+LOG_LEVEL=info
+```
+
+### 6. Run the Application
+
+**Development:**
+```bash
+npm run dev
+```
+
+**Production:**
+```bash
+npm start
+```
+
+Server runs on `http://localhost:3000`
+
+## Project Structure
+
+```
+src/
+├── config/
+│   ├── database.js          # Supabase client
+│   └── logger.js            # Logging configuration
+├── middleware/
+│   ├── auth.js              # JWT & RBAC middleware
+│   ├── validation.js        # Joi validation schemas
+│   └── errorHandler.js      # Global error handler
+├── repositories/
+│   ├── employeeRepository.js
+│   ├── requestRepository.js
+│   └── actionRepository.js
+├── services/
+│   ├── authService.js       # Authentication logic
+│   └── requestService.js    # Request workflow logic
+├── controllers/
+│   ├── authController.js
+│   └── requestController.js
+├── routes/
+│   ├── authRoutes.js
+│   └── requestRoutes.js
+├── utils/
+│   └── AppError.js          # Custom error class
+├── app.js                   # Express app setup
+└── server.js                # Server entry point
+```
+
+## API Documentation
+
+### Base URL
+```
+http://localhost:3000/api
+```
 
 ### Authentication
-- `POST /api/auth/register` - Register a new employee
-- `POST /api/auth/login` - Login with email and password
-- `GET /api/auth/me` - Get current user (requires auth)
 
-### Requests
-- `POST /api/requests` - Create a new request
-- `GET /api/requests` - Get all requests (with filtering)
-- `GET /api/requests/:id` - Get request by ID
-- `GET /api/requests/:id/actions` - Get request action history
-- `POST /api/requests/:id/approve` - Approve request (manager only)
-- `POST /api/requests/:id/reject` - Reject request (manager only)
-- `POST /api/requests/:id/close` - Close request (assigned employee only)
+All endpoints except `/auth/register` and `/auth/login` require JWT token in header:
+```
+Authorization: Bearer <token>
+```
 
-## Environment Variables
+---
 
-- `SUPABASE_URL` - Your Supabase project URL
-- `SUPABASE_SERVICE_KEY` - Your Supabase service role key
-- `JWT_SECRET` - Secret key for JWT signing
-- `JWT_EXPIRES_IN` - JWT expiration time (default: 7d)
-- `PORT` - Server port (default: 3000)
-- `NODE_ENV` - Environment (development/production)
+## Endpoints
+
+### 1. Authentication
+
+#### Register Employee
+```http
+POST /auth/register
+Content-Type: application/json
+
+{
+  "email": "employee@company.com",
+  "password": "password123",
+  "fullName": "John Doe",
+  "role": "employee",
+  "managerId": "uuid-of-manager" // optional
+}
+```
+
+**Response (201):**
+```json
+{
+  "status": "success",
+  "data": {
+    "employee": {
+      "id": "uuid",
+      "email": "employee@company.com",
+      "full_name": "John Doe",
+      "role": "employee",
+      "manager_id": "uuid-of-manager",
+      "created_at": "2024-01-01T00:00:00.000Z"
+    },
+    "token": "jwt-token"
+  }
+}
+```
+
+#### Login
+```http
+POST /auth/login
+Content-Type: application/json
+
+{
+  "email": "employee@company.com",
+  "password": "password123"
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "data": {
+    "employee": { ... },
+    "token": "jwt-token"
+  }
+}
+```
+
+#### Get Current User
+```http
+GET /auth/me
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "data": {
+    "employee": { ... }
+  }
+}
+```
+
+---
+
+### 2. Requests
+
+#### Create Request
+```http
+POST /requests
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "title": "Website Update Request",
+  "description": "Update the homepage banner",
+  "assignedTo": "uuid-of-employee"
+}
+```
+
+**Response (201):**
+```json
+{
+  "status": "success",
+  "data": {
+    "request": {
+      "id": "uuid",
+      "title": "Website Update Request",
+      "description": "Update the homepage banner",
+      "status": "pending",
+      "created_by": "uuid",
+      "assigned_to": "uuid",
+      "created_at": "2024-01-01T00:00:00.000Z"
+    }
+  }
+}
+```
+
+#### Get All Requests
+```http
+GET /requests
+GET /requests?status=pending
+GET /requests?assignedTo=uuid
+GET /requests?createdBy=uuid
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "results": 2,
+  "data": {
+    "requests": [
+      {
+        "id": "uuid",
+        "title": "Request Title",
+        "status": "pending",
+        "creator": {
+          "id": "uuid",
+          "full_name": "John Doe",
+          "email": "john@company.com"
+        },
+        "assignee": {
+          "id": "uuid",
+          "full_name": "Jane Smith",
+          "email": "jane@company.com"
+        }
+      }
+    ]
+  }
+}
+```
+
+#### Get Request by ID
+```http
+GET /requests/:id
+Authorization: Bearer <token>
+```
+
+#### Approve Request (Manager Only)
+```http
+POST /requests/:id/approve
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "notes": "Approved after review" // optional
+}
+```
+
+**Business Rule:** Only the manager of the assigned employee can approve
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "data": {
+    "request": {
+      "id": "uuid",
+      "status": "approved",
+      "approved_by": "manager-uuid",
+      ...
+    }
+  }
+}
+```
+
+#### Reject Request (Manager Only)
+```http
+POST /requests/:id/reject
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "notes": "Needs more details" // optional
+}
+```
+
+**Business Rule:** Only the manager of the assigned employee can reject
+
+#### Close Request
+```http
+POST /requests/:id/close
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "notes": "Work completed" // optional
+}
+```
+
+**Business Rules:**
+- Only the assigned employee can close
+- Request must be approved first
+
+#### Get Request Action History
+```http
+GET /requests/:id/actions
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "results": 3,
+  "data": {
+    "actions": [
+      {
+        "id": "uuid",
+        "action_type": "closed",
+        "notes": "Work completed",
+        "created_at": "2024-01-03T00:00:00.000Z",
+        "performer": {
+          "full_name": "Jane Smith"
+        }
+      },
+      {
+        "id": "uuid",
+        "action_type": "approved",
+        "notes": "Looks good",
+        "created_at": "2024-01-02T00:00:00.000Z",
+        "performer": {
+          "full_name": "Manager Name"
+        }
+      },
+      {
+        "id": "uuid",
+        "action_type": "created",
+        "created_at": "2024-01-01T00:00:00.000Z",
+        "performer": {
+          "full_name": "John Doe"
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Error Responses
+
+All errors follow this format:
+
+```json
+{
+  "status": "fail",
+  "message": "Error message here"
+}
+```
+
+**Common Status Codes:**
+- `400` - Bad Request (validation error)
+- `401` - Unauthorized (missing/invalid token)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found
+- `500` - Internal Server Error
+
+**Example Error:**
+```json
+{
+  "status": "fail",
+  "message": "Only the assigned employee's manager can approve this request"
+}
+```
+
+---
+
+## Business Rules
+
+### Request Workflow
+
+1. **Creation**: Any employee can create a request and assign it to another employee
+2. **Approval/Rejection**: Only the assigned employee's manager can approve or reject
+3. **Closing**: Only the assigned employee can close, and only after approval
+
+### Status Flow
+
+```
+pending → approved → closed
+       ↘ rejected
+```
+
+- `pending`: Initial state after creation
+- `approved`: Manager approved the request
+- `rejected`: Manager rejected the request
+- `closed`: Assigned employee completed and closed
+
+### Role-Based Access
+
+- **Employee**: Create requests, close own assigned approved requests
+- **Manager**: Approve/reject requests for their direct reports
+
+---
+
+## Testing the API
+
+### Using curl
+
+**1. Register a Manager:**
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "manager@company.com",
+    "password": "password123",
+    "fullName": "Manager One",
+    "role": "manager"
+  }'
+```
+
+**2. Register an Employee:**
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "employee@company.com",
+    "password": "password123",
+    "fullName": "Employee One",
+    "role": "employee",
+    "managerId": "<manager-id-from-step-1>"
+  }'
+```
+
+**3. Login as Employee:**
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "employee@company.com",
+    "password": "password123"
+  }'
+```
+
+**4. Create Request (use token from step 3):**
+```bash
+curl -X POST http://localhost:3000/api/requests \
+  -H "Authorization: Bearer <employee-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Update homepage",
+    "description": "Change banner image",
+    "assignedTo": "<employee-id>"
+  }'
+```
+
+**5. Login as Manager and Approve:**
+```bash
+# Login
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "manager@company.com",
+    "password": "password123"
+  }'
+
+# Approve request
+curl -X POST http://localhost:3000/api/requests/<request-id>/approve \
+  -H "Authorization: Bearer <manager-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"notes": "Approved"}'
+```
+
+### Using Postman/Insomnia
+
+Import the endpoints from the API documentation above. Set up environment variables for tokens.
+
+---
+
+## Security Features
+
+- **Password Hashing**: bcrypt with salt rounds
+- **JWT Authentication**: Stateless token-based auth
+- **Rate Limiting**: 100 requests per 15 minutes per IP
+- **Helmet**: Security headers
+- **CORS**: Configurable cross-origin requests
+- **Input Validation**: Joi schema validation
+- **SQL Injection Protection**: Parameterized queries via Supabase client
+
+---
+
+## Monitoring & Logging
+
+All logs are structured JSON format:
+
+```json
+{
+  "level": "info",
+  "message": "Request created",
+  "requestId": "uuid",
+  "creatorId": "uuid",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**Log Levels:**
+- `info`: Normal operations
+- `warn`: Warning messages
+- `error`: Error events with stack traces
+- `debug`: Detailed debugging information
+
+---
+
+## Production Deployment
+
+### Environment Variables
+Ensure all production environment variables are set securely:
+- Use strong JWT_SECRET (min 32 characters)
+- Set NODE_ENV=production
+- Use production Supabase credentials
+
+### Recommendations
+- Deploy on services like Railway, Render, or AWS
+- Set up monitoring (New Relic, DataDog)
+- Configure log aggregation
+- Enable HTTPS
+- Set up backup for database
+- Implement rate limiting per user
+- Add request/response logging
+
+---
+
+## Troubleshooting
+
+**Issue:** "Invalid token"
+- Solution: Check if token is expired, login again
+
+**Issue:** "Only the assigned employee's manager can approve"
+- Solution: Verify manager_id relationship in employees table
+
+**Issue:** Database connection error
+- Solution: Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env
+
+**Issue:** "Only approved requests can be closed"
+- Solution: Request must be approved by manager first
+
+---
+
+## Support
+
+For issues or questions:
+1. Check the troubleshooting section
+2. Review Supabase logs in dashboard
+3. Check application logs for detailed error messages
+
+---
+
+## License
+
+MIT
