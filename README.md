@@ -56,18 +56,17 @@ npm install
 Create `.env` file in root directory:
 
 ```bash
-PORT=3000
+# Server
+PORT=5000
 NODE_ENV=development
 
-# Get these from Supabase project settings
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
+# Supabase
+SUPABASE_URL=https://mhaoksxiroflwuashsph.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1oYW9rc3hpcm9mbHd1YXNoc3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NjM1MDEsImV4cCI6MjA3OTUzOTUwMX0.lsg74ICb7zfzqBxLw3Jg4cGfJO9HBuVxXuwPOMxSL1c
 
-# Generate a strong secret key
-JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+# JWT
+JWT_SECRET=your_jwt_secret_key
 JWT_EXPIRES_IN=7d
-
-LOG_LEVEL=info
 ```
 
 ### 6. Run the Application
